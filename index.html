@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Buying Group Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
@@ -179,6 +180,28 @@
   /* Import log */
   #import-log { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 11px; color: var(--text2); max-height: 150px; overflow-y: auto; font-family: monospace; margin-top: 12px; display: none; }
   #import-log.show { display: block; }
+
+  /* CBG Export tab */
+  .cbg-table-wrap input[type=text], .cbg-table-wrap input[type=number] {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 4px; padding: 3px 6px; font-size: 11px; width: 100%;
+  }
+  .cbg-table-wrap input:focus { border-color: var(--accent); outline: none; }
+
+  /* Email sync tab */
+  .setup-steps { counter-reset: step; list-style: none; }
+  .setup-steps li { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  .setup-steps li::before { counter-increment: step; content: counter(step); display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: var(--accent); border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .setup-steps li div { flex: 1; }
+  .setup-steps li strong { display: block; font-size: 12px; margin-bottom: 2px; }
+  .setup-steps li span { font-size: 11px; color: var(--muted); }
+  .code-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-family: monospace; font-size: 11px; color: var(--accent2); }
+
+  /* Parsed email log */
+  .email-log-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+  .email-log-meta { flex: 1; }
+  .email-log-meta strong { display: block; font-size: 12px; }
+  .email-log-meta span { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -202,7 +225,9 @@
       <div class="nav-item" onclick="switchTab('cashback')"><span class="icon">🎁</span> Cashback</div>
       <div class="nav-section">Tools</div>
       <div class="nav-item" onclick="switchTab('reconcile')"><span class="icon">⚠️</span> Reconcile</div>
-      <div class="nav-item" onclick="switchTab('import')"><span class="icon">📥</span> Import CSVs</div>
+      <div class="nav-item" onclick="switchTab('cbg-export')"><span class="icon">📤</span> CBG Export</div>
+      <div class="nav-item" onclick="switchTab('import')"><span class="icon">📥</span> Import Files</div>
+      <div class="nav-item" onclick="switchTab('email-sync')"><span class="icon">📧</span> Email Sync</div>
     </nav>
   </div>
 
@@ -402,23 +427,24 @@
     <!-- IMPORT -->
     <div id="tab-import" class="tab-content">
       <div class="page-header">
-        <div><div class="page-title">Import CSVs</div><div class="page-subtitle">Drag & drop or click to import — file type is auto-detected</div></div>
+        <div><div class="page-title">Import Files</div><div class="page-subtitle">Drop CSV, PDF invoices, or .eml emails — type is auto-detected</div></div>
         <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑 Clear All Data</button>
       </div>
 
       <div class="import-zone" id="main-drop-zone" onclick="document.getElementById('csv-file-input').click()"
            ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
         <div class="icon">📥</div>
-        <p><strong>Drag & drop CSV files here</strong> or click to browse</p>
+        <p><strong>Drag & drop files here</strong> or click to browse</p>
+        <p style="margin-top:4px;font-size:11px">CSV, PDF invoices, and .eml email files all supported</p>
         <div class="import-types">
-          <span class="badge badge-purple">CBG receipts</span>
-          <span class="badge badge-purple">CBG receipt-items</span>
-          <span class="badge badge-purple">CBG payments</span>
-          <span class="badge badge-teal">Amazon order history</span>
-          <span class="badge badge-teal">Amazon Business orders</span>
-          <span class="badge badge-yellow">CBG items summary</span>
+          <span class="badge badge-purple">CBG receipts (CSV)</span>
+          <span class="badge badge-purple">CBG payments (CSV)</span>
+          <span class="badge badge-teal">Amazon history (CSV)</span>
+          <span class="badge badge-green">Amazon invoice (PDF)</span>
+          <span class="badge badge-green">Amazon receipt (PDF)</span>
+          <span class="badge badge-yellow">Email receipts (.eml)</span>
         </div>
-        <input type="file" id="csv-file-input" accept=".csv" multiple onchange="handleFileSelect(event)">
+        <input type="file" id="csv-file-input" accept=".csv,.pdf,.eml" multiple onchange="handleFileSelect(event)">
       </div>
       <div id="import-log"></div>
 
@@ -433,13 +459,110 @@
 
       <div class="section-title" style="margin-top:16px">Export Data</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-success" onclick="exportExcel()">📊 Export Full Excel (.xlsx)</button>
         <button class="btn btn-ghost" onclick="exportCSV('orders')">Export Orders CSV</button>
         <button class="btn btn-ghost" onclick="exportCSV('cashback')">Export Cashback CSV</button>
-        <button class="btn btn-ghost" onclick="exportCSV('reconcile')">Export Reconcile Report</button>
+        <button class="btn btn-ghost" onclick="exportCBGCSV()">Export CBG Submission CSV</button>
         <button class="btn btn-ghost" onclick="saveJSON()">💾 Save All Data (JSON)</button>
         <button class="btn btn-ghost" onclick="loadJSONFile()">📂 Load Saved Data (JSON)</button>
         <input type="file" id="json-load-input" accept=".json" style="display:none" onchange="loadJSON(event)">
       </div>
+    </div>
+
+    <!-- CBG EXPORT -->
+    <div id="tab-cbg-export" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">CBG Submission Export</div><div class="page-subtitle">Format orders for submission to Canada Buying Group portal</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="renderCBGExport()">🔄 Refresh</button>
+          <button class="btn btn-success" onclick="exportCBGCSV()">📤 Download CBG CSV</button>
+          <button class="btn btn-primary" onclick="exportExcel()">📊 Full Excel</button>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+        💡 <strong>How to use:</strong> Edit the <em>CBG Item Name</em> column to match CBG's exact product names (e.g. <em>AMAZON ECHO DOT 5 - BLACK</em>). Update tracking numbers, then download the CSV to reference when submitting at canadabuyinggroup.com.
+      </div>
+      <div class="table-wrap cbg-table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th>
+            <th>CBG Item Name <span style="font-weight:400;color:var(--accent)">(editable)</span></th>
+            <th>Qty</th>
+            <th class="text-right">Price Paid</th>
+            <th>Tracking #</th>
+            <th>Warehouse</th>
+            <th>BG Receipt</th>
+          </tr></thead>
+          <tbody id="cbg-export-tbody"><tr><td colspan="7" class="empty"><div style="padding:20px">Import orders first, then return here to format for CBG submission.</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- EMAIL SYNC -->
+    <div id="tab-email-sync" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">Email Sync</div><div class="page-subtitle">Drop .eml files or set up auto-forwarding to parse receipts automatically</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+
+        <!-- Drop zone for .eml -->
+        <div>
+          <div class="section-title">📧 Drop Email Files (.eml)</div>
+          <div class="import-zone" id="email-drop-zone" style="margin-bottom:0"
+               onclick="document.getElementById('eml-file-input').click()"
+               ondragover="onDragOver2(event)" ondragleave="onDragLeave2(event)" ondrop="onDropEML(event)">
+            <div class="icon">📨</div>
+            <p><strong>Drag & drop .eml files here</strong></p>
+            <p style="margin-top:4px;font-size:11px">Export emails from Mail.app or Gmail → Save as .eml</p>
+            <div class="import-types" style="margin-top:8px">
+              <span class="badge badge-teal">Amazon order confirmation</span>
+              <span class="badge badge-yellow">Rakuten cashback</span>
+              <span class="badge badge-yellow">Air Canada eStore</span>
+              <span class="badge badge-purple">CBG payout notice</span>
+            </div>
+            <input type="file" id="eml-file-input" accept=".eml,.mbox" multiple onchange="handleEMLSelect(event)">
+          </div>
+        </div>
+
+        <!-- Auto-forwarding setup -->
+        <div>
+          <div class="section-title">⚡ Auto-Forwarding Setup (Advanced)</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <ol class="setup-steps">
+              <li>
+                <div>
+                  <strong>Sign up for Cloudmailin (free)</strong>
+                  <span>Go to <a href="https://cloudmailin.com" target="_blank" style="color:var(--accent)">cloudmailin.com</a> → create a free account → get your forwarding address (e.g. <span class="code-chip">abc123@cloudmailin.net</span>)</span>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <strong>Set target URL in Cloudmailin</strong>
+                  <span>Point it to: <span class="code-chip" id="api-url-display">https://your-app.vercel.app/api/email</span></span>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <strong>Forward receipts to your Cloudmailin address</strong>
+                  <span>Set up Gmail filter: from:(amazon.ca OR rakuten.ca OR aeroplan.com) → forward to your Cloudmailin address</span>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <strong>Click Sync to pull forwarded emails</strong>
+                  <span>Emails are stored server-side and imported into your tracker</span>
+                </div>
+              </li>
+            </ol>
+            <button class="btn btn-primary" style="width:100%" onclick="syncEmailsFromAPI()">🔄 Sync Forwarded Emails</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Recent Parsed Emails <span id="email-log-count"></span></div>
+      <div id="import-log-email"></div>
+      <div id="email-sync-empty" class="empty" style="display:none"><div class="icon">📭</div><p>No emails imported yet. Drop .eml files above or set up auto-forwarding.</p></div>
     </div>
 
   </div><!-- end main -->
@@ -634,6 +757,8 @@ let state = {
   bgPayments: [],    // CBG payments CSVs
   bgItems: [],       // CBG items summary
   cashback: [],      // manual cashback entries
+  cbgItemMap: {},    // orderId → CBG item name mapping
+  emailLog: [],      // parsed email records
 };
 
 let editingOrderId = null;
@@ -655,7 +780,7 @@ function saveState() {
 
 function clearAllData() {
   if (!confirm('Clear ALL imported data? This cannot be undone.')) return;
-  state = { orders: [], bgReceiptItems: [], bgReceipts: [], bgPayments: [], bgItems: [], cashback: [] };
+  state = { orders: [], bgReceiptItems: [], bgReceipts: [], bgPayments: [], bgItems: [], cashback: [], cbgItemMap: {}, emailLog: [] };
   saveState();
   refreshAll();
   toast('All data cleared', 'warn');
@@ -678,6 +803,8 @@ function switchTab(id) {
   if (id === 'cashback') renderCashback();
   if (id === 'reconcile') runReconcile();
   if (id === 'import') updateImportStats();
+  if (id === 'cbg-export') renderCBGExport();
+  if (id === 'email-sync') renderEmailLog();
 }
 
 // =====================
@@ -729,10 +856,20 @@ function parseCSVRow(line) {
 // =====================
 function onDragOver(e) { e.preventDefault(); document.getElementById('main-drop-zone').classList.add('dragover'); }
 function onDragLeave(e) { document.getElementById('main-drop-zone').classList.remove('dragover'); }
+function onDragOver2(e) { e.preventDefault(); document.getElementById('email-drop-zone').classList.add('dragover'); }
+function onDragLeave2(e) { document.getElementById('email-drop-zone').classList.remove('dragover'); }
+function onDropEML(e) {
+  e.preventDefault();
+  document.getElementById('email-drop-zone').classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.match(/\.(eml|mbox)$/i));
+  processFiles(files);
+}
+function handleEMLSelect(e) { processFiles(Array.from(e.target.files)); e.target.value = ''; }
+
 function onDrop(e) {
   e.preventDefault();
   document.getElementById('main-drop-zone').classList.remove('dragover');
-  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.match(/\.(csv|pdf|eml|mbox)$/i));
   processFiles(files);
 }
 function handleFileSelect(e) { processFiles(Array.from(e.target.files)); e.target.value = ''; }
@@ -741,16 +878,31 @@ function processFiles(files) {
   const log = document.getElementById('import-log');
   log.classList.add('show');
   log.innerHTML = '';
+  if (!files.length) { logMsg(log, '⚠️ No supported files found (.csv, .pdf, .eml)', 'warn'); return; }
+
+  const csvFiles = files.filter(f => f.name.match(/\.csv$/i));
+  const pdfFiles = files.filter(f => f.name.match(/\.pdf$/i));
+  const emlFiles = files.filter(f => f.name.match(/\.(eml|mbox)$/i));
+
+  logMsg(log, `📂 Processing: ${csvFiles.length} CSV, ${pdfFiles.length} PDF, ${emlFiles.length} email files`);
+
   let pending = files.length;
-  if (!pending) { logMsg(log, '⚠️ No CSV files found', 'warn'); return; }
-  files.forEach(file => {
+  const done = () => { pending--; if (pending === 0) { saveState(); refreshAll(); updateImportStats(); } };
+
+  csvFiles.forEach(file => {
     const reader = new FileReader();
-    reader.onload = e => {
-      const result = importCSV(e.target.result, file.name, log);
-      pending--;
-      if (pending === 0) { saveState(); refreshAll(); updateImportStats(); }
-    };
+    reader.onload = e => { importCSV(e.target.result, file.name, log); done(); };
     reader.readAsText(file);
+  });
+
+  emlFiles.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => { parseEMLFile(e.target.result, file.name, log); done(); };
+    reader.readAsText(file);
+  });
+
+  pdfFiles.forEach(file => {
+    parsePDFFile(file, log).then(done).catch(err => { logMsg(log, `  ❌ ${file.name}: ${err.message}`, 'error'); done(); });
   });
 }
 
@@ -1416,6 +1568,414 @@ function statusBadge(s) {
   return `<span class="badge badge-gray">${s||'—'}</span>`;
 }
 function toggleOrderType() {}
+
+// =====================
+// PDF PARSING (PDF.js)
+// =====================
+let _pdfjsLib = null;
+function getPDFJS() {
+  if (_pdfjsLib) return Promise.resolve(_pdfjsLib);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      _pdfjsLib = window['pdfjs-dist/build/pdf'];
+      _pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve(_pdfjsLib);
+    };
+    s.onerror = () => reject(new Error('Failed to load PDF.js'));
+    document.head.appendChild(s);
+  });
+}
+
+async function parsePDFFile(file, log) {
+  logMsg(log, `📄 ${file.name} (PDF) — extracting text...`);
+  const lib = await getPDFJS();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  extractAmazonFromPDF(fullText, file.name, log);
+}
+
+function extractAmazonFromPDF(text, filename, log) {
+  const orderIds = text.match(/\b(\d{3}-\d{7}-\d{7})\b/g);
+  if (!orderIds || !orderIds.length) {
+    logMsg(log, `  ⚠️ ${filename}: No Amazon order ID found. May not be an Amazon invoice.`, 'warn');
+    return;
+  }
+  const orderId = [...new Set(orderIds)][0];
+
+  // Date
+  let date = '';
+  const dateM = text.match(/(?:Order\s+Placed|Date)[:\s]+([A-Za-z]+\s+\d{1,2},?\s*\d{4})/i) ||
+                text.match(/(\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s*\d{4})\b/i);
+  if (dateM) { try { date = new Date(dateM[1]).toISOString().slice(0,10); } catch(e) {} }
+
+  // Total
+  const totalM = text.match(/Order\s+Total[:\s]+\$?(?:CAD\s*)?([\d,]+\.\d{2})/i) ||
+                 text.match(/Grand\s+Total[:\s]+\$?(?:CAD\s*)?([\d,]+\.\d{2})/i) ||
+                 text.match(/Total[:\s]+CAD\s+([\d,]+\.\d{2})/i);
+  const total = totalM ? parseFloat(totalM[1].replace(',','')) : 0;
+
+  // Tracking
+  const trackM = text.match(/(?:TBA\d{12,20}|1Z[A-Z0-9]{16})/gi) || [];
+  const tracking = [...new Set(trackM)].join(', ');
+
+  // Items (grab text between quantity patterns)
+  const itemLines = [];
+  const qtyPatterns = text.match(/(\d+)\s+of:\s+(.{10,80}?)(?=\s+\$|\s+Sold)/gi) || [];
+  qtyPatterns.forEach(m => itemLines.push(m.trim()));
+
+  if (state.orders.find(x => x.orderId === orderId)) {
+    const ex = state.orders.find(x => x.orderId === orderId);
+    if (tracking && !ex.tracking) { ex.tracking = tracking; logMsg(log, `  📦 Updated tracking for ${orderId}: ${tracking}`, 'success'); }
+    else logMsg(log, `  ⏭️ Order ${orderId} already exists — skipped`, '');
+    return;
+  }
+
+  state.orders.push({
+    id: uid(), orderId, date, retailer: 'Amazon.ca', account: 'PDF Import',
+    type: 'online', desc: itemLines.join('\n') || `Order ${orderId}`,
+    total, cc: '', cbPortal: '', cbRate: '', cbStatus: 'none',
+    cbExpected: 0, cbReceived: 0, bgReceiptId: '', tracking,
+    notes: `Imported from PDF: ${filename}`, source: 'pdf-import'
+  });
+  logMsg(log, `  ✅ Order ${orderId} imported from PDF — $${total} — ${tracking || 'no tracking yet'}`, 'success');
+}
+
+// =====================
+// EML PARSING
+// =====================
+function parseEMLFile(text, filename, log) {
+  const lines = text.split(/\r?\n/);
+  let subject = '', from = '', dateStr = '', inHeaders = true;
+  let body = '';
+  for (const line of lines) {
+    if (inHeaders) {
+      if (line === '') { inHeaders = false; continue; }
+      if (/^Subject:/i.test(line)) subject = line.replace(/^Subject:\s*/i,'').trim();
+      else if (/^From:/i.test(line)) from = line.replace(/^From:\s*/i,'').trim();
+      else if (/^Date:/i.test(line)) dateStr = line.replace(/^Date:\s*/i,'').trim();
+    } else {
+      body += line + '\n';
+    }
+  }
+  // Decode quoted-printable
+  body = body.replace(/=\r?\n/g,'').replace(/=([0-9A-Fa-f]{2})/g, (_,h)=>String.fromCharCode(parseInt(h,16)));
+  // Strip HTML, decode entities
+  const txt = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+                  .replace(/<[^>]+>/g,' ')
+                  .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+                  .replace(/&nbsp;/g,' ').replace(/&#39;/g,"'").replace(/&quot;/g,'"')
+                  .replace(/\s+/g,' ');
+
+  let date = '';
+  try { const d = new Date(dateStr); if (!isNaN(d)) date = d.toISOString().slice(0,10); } catch(e) {}
+
+  const subL = subject.toLowerCase(), fromL = from.toLowerCase();
+
+  logMsg(log, `📧 ${filename} — From: ${from.slice(0,40)} — Subject: ${subject.slice(0,50)}`);
+
+  if (fromL.includes('amazon') || subL.includes('amazon') || subL.match(/order\s+(confirmation|shipped|delivered)/i)) {
+    parseAmazonEmail(subject, txt, date, filename, log);
+  } else if (fromL.includes('rakuten') || subL.includes('rakuten') || subL.includes('cash back')) {
+    parseRakutenEmail(subject, txt, date, filename, log);
+  } else if (fromL.includes('aeroplan') || fromL.includes('aircanada') || subL.includes('estore') || subL.includes('e-store')) {
+    parseACEStoreEmail(subject, txt, date, filename, log);
+  } else if (fromL.includes('canadabuyinggroup') || fromL.includes('cbg') || subL.includes('buying group') || subL.includes('payment issued')) {
+    parseCBGEmail(subject, txt, date, filename, log);
+  } else {
+    logMsg(log, `  ⚠️ Unrecognized email type — logging for manual review`, 'warn');
+    addEmailLog(filename, subject, from, date, 'unknown', null);
+  }
+}
+
+function parseAmazonEmail(subject, body, date, filename, log) {
+  const orderIdM = body.match(/\b(\d{3}-\d{7}-\d{7})\b/);
+  if (!orderIdM) { logMsg(log, `  ⚠️ No Amazon order ID found in email`, 'warn'); return; }
+  const orderId = orderIdM[1];
+
+  const totalM = body.match(/Order\s+Total[:\s]+\$?(?:CAD\s*)?([\d,]+\.\d{2})/i) ||
+                 body.match(/Total[:\s]+\$?(?:CAD\s*)?([\d,]+\.\d{2})/i);
+  const total = totalM ? parseFloat(totalM[1].replace(',','')) : 0;
+  const trackM = body.match(/(?:TBA\d{12,20}|1Z[A-Z0-9]{16})/gi) || [];
+  const tracking = [...new Set(trackM)].join(', ');
+
+  if (state.orders.find(x => x.orderId === orderId)) {
+    const ex = state.orders.find(x => x.orderId === orderId);
+    if (tracking && !ex.tracking) { ex.tracking = tracking; logMsg(log, `  📦 Updated tracking for ${orderId}: ${tracking}`, 'success'); }
+    else logMsg(log, `  ⏭️ Order ${orderId} already exists`, '');
+  } else {
+    state.orders.push({
+      id: uid(), orderId, date, retailer: 'Amazon.ca', account: 'Email Import',
+      type: 'online', desc: subject, total, cc: '', cbPortal: '', cbRate: '',
+      cbStatus: 'none', cbExpected: 0, cbReceived: 0, bgReceiptId: '', tracking,
+      notes: `Imported from email: ${filename}`, source: 'email-import'
+    });
+    logMsg(log, `  ✅ Amazon order ${orderId} — $${total}${tracking ? ' — tracking: ' + tracking.slice(0,20) : ''}`, 'success');
+  }
+  addEmailLog(filename, subject, 'Amazon.ca', date, 'amazon-order', orderId);
+}
+
+function parseRakutenEmail(subject, body, date, filename, log) {
+  const amtM = body.match(/\$([\d,]+\.\d{2})\s*(?:Cash\s*Back|Cashback|rebate)/i) ||
+               body.match(/(?:Cash\s*Back|Cashback)[:\s]+\$([\d,]+\.\d{2})/i);
+  const amt = amtM ? parseFloat(amtM[1].replace(',','')) : 0;
+  const orderM = body.match(/\b(\d{3}-\d{7}-\d{7})\b/);
+
+  state.cashback.push({
+    id: uid(), date, portal: 'Rakuten',
+    orderId: orderM ? orderM[1] : filename,
+    retailer: 'Amazon.ca', purchaseAmt: 0, rate: 0, expected: amt,
+    received: 0, status: 'pending', expectedDate: '', notes: `Email: ${subject}`
+  });
+  addEmailLog(filename, subject, 'Rakuten', date, 'rakuten-cashback', amt ? `$${amt}` : '?');
+  logMsg(log, `  ✅ Rakuten cashback entry: ${amt ? '$' + amt : 'amount unknown'}`, 'success');
+}
+
+function parseACEStoreEmail(subject, body, date, filename, log) {
+  const amtM = body.match(/([\d,]+)\s*(?:Aeroplan\s+)?[Pp]oints/i) ||
+               body.match(/\$([\d,]+\.\d{2})\s*(?:cash\s*back|rebate)/i);
+  const amt = amtM ? parseFloat(amtM[1].replace(',','')) : 0;
+
+  state.cashback.push({
+    id: uid(), date, portal: 'Air Canada eStore',
+    orderId: filename, retailer: 'Amazon.ca',
+    purchaseAmt: 0, rate: 0, expected: amt,
+    received: 0, status: 'pending', expectedDate: '', notes: `Email: ${subject}`
+  });
+  addEmailLog(filename, subject, 'Air Canada eStore', date, 'ac-estore', amt ? amt + ' pts' : '?');
+  logMsg(log, `  ✅ AC eStore entry: ${amt ? amt + ' Aeroplan points' : 'amount unknown'}`, 'success');
+}
+
+function parseCBGEmail(subject, body, date, filename, log) {
+  const amtM = body.match(/\$([\d,]+\.\d{2})/);
+  const amt = amtM ? parseFloat(amtM[1].replace(',','')) : 0;
+  const checkM = body.match(/(?:Check|Cheque|ACH)[:\s#]*([A-Z0-9-]+)/i);
+
+  if (amt > 0) {
+    // Check if it's a payout notification
+    const existing = state.bgPayments.find(p => p.amount == amt);
+    if (!existing) {
+      logMsg(log, `  📬 CBG payout email detected — $${amt} — verify in Payouts tab`, 'success');
+    }
+  }
+  addEmailLog(filename, subject, 'CBG', date, 'cbg-payout', amt ? `$${amt}` : null);
+  logMsg(log, `  📧 CBG email logged — review Payouts tab for verification`, '');
+}
+
+function addEmailLog(filename, subject, from, date, type, ref) {
+  if (!state.emailLog) state.emailLog = [];
+  state.emailLog.unshift({ id: uid(), filename, subject, from, date, type, ref, importedAt: new Date().toISOString() });
+  if (state.emailLog.length > 200) state.emailLog.pop();
+}
+
+function renderEmailLog() {
+  const el = document.getElementById('import-log-email');
+  const empty = document.getElementById('email-sync-empty');
+  const count = document.getElementById('email-log-count');
+  if (!state.emailLog || !state.emailLog.length) {
+    el.innerHTML = '';
+    if (empty) empty.style.display = '';
+    if (count) count.textContent = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  if (count) count.textContent = `(${state.emailLog.length})`;
+  const typeIcon = { 'amazon-order':'📦', 'rakuten-cashback':'💰', 'ac-estore':'✈️', 'cbg-payout':'💸', 'unknown':'📧' };
+  el.innerHTML = state.emailLog.map(e => `
+    <div class="email-log-item">
+      <div style="font-size:22px">${typeIcon[e.type]||'📧'}</div>
+      <div class="email-log-meta">
+        <strong>${escHtml(e.subject.slice(0,70))}</strong>
+        <span>${e.from} · ${e.date || 'no date'} · ${e.filename}</span>
+      </div>
+      ${e.ref ? `<span class="badge badge-green">${escHtml(String(e.ref))}</span>` : ''}
+    </div>`).join('');
+}
+
+// =====================
+// CBG SUBMISSION EXPORT
+// =====================
+function renderCBGExport() {
+  if (!state.cbgItemMap) state.cbgItemMap = {};
+  const orders = state.orders.filter(o => o.type === 'online').sort((a,b) => b.date.localeCompare(a.date));
+  const tbody = document.getElementById('cbg-export-tbody');
+  if (!orders.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--muted)">No online orders. Import your Amazon CSV or PDF invoices first.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = orders.map(o => {
+    const itemName = state.cbgItemMap[o.id] || guessItemName(o.desc);
+    const tracking = o.tracking || '';
+    return `<tr>
+      <td class="nowrap muted">${fmtDate(o.date)}</td>
+      <td style="min-width:220px">
+        <input type="text" value="${escHtml(itemName)}"
+          onchange="state.cbgItemMap['${o.id}']=this.value;saveState()"
+          placeholder="e.g. AMAZON ECHO DOT 5 - BLACK">
+      </td>
+      <td><input type="number" style="width:52px" value="1" min="1" id="cbgq-${o.id}"></td>
+      <td class="text-right nowrap"><strong>${fmtMoney(o.total)}</strong></td>
+      <td style="min-width:160px"><input type="text" value="${escHtml(tracking)}" id="cbgt-${o.id}" placeholder="TBA... or 1Z..."></td>
+      <td><input type="text" style="width:90px" value="DELAWARE" id="cbgw-${o.id}"></td>
+      <td>${o.bgReceiptId ? `<span class="badge badge-green">${o.bgReceiptId}</span>` : '<span class="badge badge-gray">Not submitted</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function guessItemName(desc) {
+  if (!desc) return '';
+  return desc.split('\n')[0].replace(/^\d+x?\s*/i,'').slice(0,60).toUpperCase().replace(/[()]/g,'').replace(/\s+/g,' ').trim();
+}
+
+function escHtml(s) {
+  return (s||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function exportCBGCSV() {
+  if (!state.cbgItemMap) state.cbgItemMap = {};
+  const orders = state.orders.filter(o => o.type === 'online');
+  if (!orders.length) { toast('No online orders to export', 'warn'); return; }
+
+  const header = ['ITEM','QTY','PRICE','TRACKING NUMBERS','DELIVERY','WAREHOUSE','STATUS'];
+  const rows = orders.map(o => {
+    const itemName = state.cbgItemMap[o.id] || guessItemName(o.desc);
+    const qty = document.getElementById(`cbgq-${o.id}`)?.value || '1';
+    const tracking = document.getElementById(`cbgt-${o.id}`)?.value || o.tracking || '';
+    const wh = document.getElementById(`cbgw-${o.id}`)?.value || 'DELAWARE';
+    return [itemName, qty, (parseFloat(o.total)||0).toFixed(2), tracking, 'SHIP DIRECT', wh,
+            o.bgReceiptId ? 'SUBMITTED' : 'PENDING'];
+  });
+
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  dlFile(csv, `cbg-submission-${new Date().toISOString().slice(0,10)}.csv`, 'text/csv');
+  toast('CBG submission CSV downloaded', 'success');
+}
+
+// =====================
+// EXCEL EXPORT (SheetJS)
+// =====================
+function exportExcel() {
+  if (typeof XLSX === 'undefined') {
+    toast('Excel library not loaded yet — try again in a moment', 'warn');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: All Orders
+  const oRows = [['Date','Retailer','Account','Order ID','Type','Description','Total CAD','Credit Card','Cashback Portal','CB Rate %','CB Status','BG Receipt ID','Tracking','Notes']];
+  state.orders.forEach(o => oRows.push([
+    o.date, o.retailer, o.account, o.orderId, o.type,
+    (o.desc||'').replace(/\n/g,' | ').slice(0,200),
+    parseFloat(o.total)||0, o.cc, o.cbPortal, o.cbRate, o.cbStatus, o.bgReceiptId, o.tracking, o.notes
+  ]));
+  const wsOrders = XLSX.utils.aoa_to_sheet(oRows);
+  wsOrders['!cols'] = [10,14,20,20,8,44,10,16,18,8,10,14,22,24].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsOrders, 'All Orders');
+
+  // Sheet 2: CBG Submissions
+  const sRows = [['Receipt ID','Item','Qty','Price','Tax','Commission','Total Price','Ext Total','Tracking','Warehouse','Status','Verified','Created Date']];
+  state.bgReceiptItems.forEach(i => sRows.push([
+    i.receiptId, i.item, i.qty, parseFloat(i.price)||0, parseFloat(i.tax)||0,
+    parseFloat(i.commission)||0, parseFloat(i.totalPrice)||0, parseFloat(i.extTotal)||0,
+    i.tracking, i.warehouse, i.status, i.verified?'YES':'NO', i.createdDate
+  ]));
+  const wsSub = XLSX.utils.aoa_to_sheet(sRows);
+  wsSub['!cols'] = [14,44,5,10,8,10,10,10,22,12,12,8,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsSub, 'CBG Submissions');
+
+  // Sheet 3: CBG Export (pre-formatted for portal)
+  if (!state.cbgItemMap) state.cbgItemMap = {};
+  const cRows = [['Item Name (CBG Format)','Qty','Price Paid','Tracking Number','Delivery','Warehouse','Order ID','Date','BG Receipt']];
+  state.orders.filter(o=>o.type==='online').forEach(o => {
+    const name = state.cbgItemMap[o.id] || guessItemName(o.desc);
+    cRows.push([name, 1, parseFloat(o.total)||0, o.tracking||'', 'SHIP DIRECT', 'DELAWARE', o.orderId, o.date, o.bgReceiptId||'']);
+  });
+  const wsCBG = XLSX.utils.aoa_to_sheet(cRows);
+  wsCBG['!cols'] = [44,5,12,24,12,12,20,10,14].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsCBG, 'CBG Portal Export');
+
+  // Sheet 4: Payouts
+  const pRows = [['Date','Check/ACH #','Amount','Status','Pay To','ACH Account']];
+  state.bgPayments.forEach(p => pRows.push([p.date, p.checkNum, parseFloat(p.amount)||0, p.status, p.payTo, p.achAccount]));
+  const wsPay = XLSX.utils.aoa_to_sheet(pRows);
+  wsPay['!cols'] = [12,16,12,10,22,22].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsPay, 'Payouts');
+
+  // Sheet 5: Cashback
+  const cbRows = [['Date','Portal','Order ID','Retailer','Purchase Amt','Rate %','Expected','Received','Status','Expected Date','Notes']];
+  state.cashback.forEach(c => cbRows.push([
+    c.date, c.portal, c.orderId, c.retailer,
+    parseFloat(c.purchaseAmt)||0, parseFloat(c.rate)||0,
+    parseFloat(c.expected)||0, parseFloat(c.received)||0,
+    c.status, c.expectedDate, c.notes
+  ]));
+  const wsCB = XLSX.utils.aoa_to_sheet(cbRows);
+  wsCB['!cols'] = [12,20,20,14,12,8,10,10,10,12,32].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsCB, 'Cashback');
+
+  // Sheet 6: Summary
+  const totalOrders = state.orders.length;
+  const totalSpend = state.orders.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
+  const paidOut = state.bgPayments.filter(p=>p.status==='PAID'&&!p.voided).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const pendingPayout = state.bgPayments.filter(p=>p.status==='REQUESTED'&&!p.voided).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const cbReceived = state.cashback.filter(c=>c.status==='received').reduce((s,c)=>s+(parseFloat(c.received)||0),0);
+  const cbPending = state.cashback.filter(c=>c.status==='pending').reduce((s,c)=>s+(parseFloat(c.expected)||0),0);
+  const summRows = [
+    ['BG Tracker — Summary Report', `Generated: ${new Date().toLocaleDateString('en-CA')}`],
+    [],
+    ['Metric','Value'],
+    ['Total Orders', totalOrders],
+    ['Total Spend (CAD)', totalSpend],
+    ['BG Receipt Items Submitted', state.bgReceiptItems.length],
+    ['Total Paid Out (ACH)', paidOut],
+    ['Pending Payout', pendingPayout],
+    ['Cashback Received', cbReceived],
+    ['Cashback Pending', cbPending],
+    ['Net Return (Payout + CB)', paidOut + cbReceived],
+    [],
+    ['Accounts'],
+    ...[...new Set(state.orders.map(o=>o.account).filter(Boolean))].map(a => {
+      const n = state.orders.filter(o=>o.account===a).length;
+      const s = state.orders.filter(o=>o.account===a).reduce((t,o)=>t+(parseFloat(o.total)||0),0);
+      return [a, `${n} orders · $${s.toFixed(2)}`];
+    })
+  ];
+  const wsSumm = XLSX.utils.aoa_to_sheet(summRows);
+  wsSumm['!cols'] = [{wch:30},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, wsSumm, 'Summary');
+
+  XLSX.writeFile(wb, `BG-Tracker-${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Excel workbook exported! 6 sheets included.', 'success');
+}
+
+// =====================
+// EMAIL FORWARDING SYNC (API)
+// =====================
+async function syncEmailsFromAPI() {
+  toast('Checking for forwarded emails...', '');
+  try {
+    const res = await fetch('/api/emails');
+    if (!res.ok) throw new Error(`HTTP ${res.status} — API not set up yet`);
+    const emails = await res.json();
+    if (!emails.length) { toast('No new forwarded emails', ''); return; }
+    const log = document.getElementById('import-log-email');
+    log.style.display = 'block';
+    log.innerHTML = '';
+    emails.forEach(e => parseEMLFile(e.raw || e.body || '', e.filename || e.subject || 'forwarded', log));
+    saveState(); refreshAll();
+    toast(`Synced ${emails.length} emails`, 'success');
+  } catch(err) {
+    toast(`Email sync: ${err.message}`, 'warn');
+  }
+}
+
 function refreshAll() {
   updateDashboard();
   renderOrders();
