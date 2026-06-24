@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buying Group Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3347; --accent: #6c63ff; --accent2: #00d4aa;
+    --warn: #f59e0b; --danger: #ef4444; --success: #22c55e;
+    --text: #e2e8f0; --muted: #64748b; --text2: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 13px; }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 200px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .main { flex: 1; overflow-y: auto; padding: 20px; }
+
+  /* Sidebar */
+  .logo { padding: 16px; border-bottom: 1px solid var(--border); }
+  .logo h2 { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .logo p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .nav { padding: 8px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text2); font-size: 12px; font-weight: 500; margin-bottom: 2px; transition: all .15s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--accent); color: #fff; }
+  .nav-item .icon { font-size: 14px; width: 18px; text-align: center; }
+  .nav-section { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 10px 10px 4px; }
+
+  /* Tabs */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Page header */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .page-title { font-size: 18px; font-weight: 700; }
+  .page-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* Cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .card-value { font-size: 22px; font-weight: 700; margin: 4px 0 2px; }
+  .card-sub { font-size: 11px; color: var(--muted); }
+  .card.accent { border-color: var(--accent); }
+  .card.success { border-color: var(--success); }
+  .card.warn { border-color: var(--warn); }
+  .card.danger { border-color: var(--danger); }
+  .card-value.green { color: var(--success); }
+  .card-value.yellow { color: var(--warn); }
+  .card-value.red { color: var(--danger); }
+  .card-value.purple { color: var(--accent); }
+  .card-value.teal { color: var(--accent2); }
+
+  /* Import zone */
+  .import-zone { background: var(--surface); border: 2px dashed var(--border); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all .2s; margin-bottom: 16px; }
+  .import-zone:hover, .import-zone.dragover { border-color: var(--accent); background: rgba(108,99,255,.07); }
+  .import-zone p { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .import-zone .icon { font-size: 28px; }
+  .import-zone input[type=file] { display: none; }
+  .import-types { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; border: 1px solid; }
+  .badge-purple { color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,.1); }
+  .badge-teal { color: var(--accent2); border-color: var(--accent2); background: rgba(0,212,170,.1); }
+  .badge-yellow { color: var(--warn); border-color: var(--warn); background: rgba(245,158,11,.1); }
+  .badge-green { color: var(--success); border-color: var(--success); background: rgba(34,197,94,.1); }
+  .badge-red { color: var(--danger); border-color: var(--danger); background: rgba(239,68,68,.1); }
+  .badge-gray { color: var(--muted); border-color: var(--border); background: var(--surface2); }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .toolbar input[type=text], .toolbar select { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 12px; outline: none; }
+  .toolbar input[type=text]:focus, .toolbar select:focus { border-color: var(--accent); }
+  .toolbar input[type=text] { flex: 1; min-width: 160px; }
+  .ml-auto { margin-left: auto; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5b52e0; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: #16a34a; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 600px; }
+  th { background: var(--surface2); color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 10px 12px; text-align: left; position: sticky; top: 0; white-space: nowrap; }
+  td { padding: 9px 12px; border-top: 1px solid var(--border); font-size: 12px; vertical-align: middle; }
+  tr:hover td { background: var(--surface2); }
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
+  .muted { color: var(--muted); }
+  .text-right { text-align: right; }
+  .nowrap { white-space: nowrap; }
+
+  /* Status dots */
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; }
+  .dot-green { background: var(--success); }
+  .dot-yellow { background: var(--warn); }
+  .dot-red { background: var(--danger); }
+  .dot-gray { background: var(--muted); }
+  .dot-purple { background: var(--accent); }
+
+  /* Modal */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .modal-header h3 { font-size: 15px; font-weight: 700; }
+  .modal-body { padding: 20px; }
+  .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+  .close-btn { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px; }
+  .close-btn:hover { color: var(--text); }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-grid.col1 { grid-template-columns: 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  input, select, textarea { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 10px; font-size: 12px; outline: none; width: 100%; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 60px; }
+  select option { background: var(--surface2); }
+
+  /* Section headers */
+  .section-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .section-title span { color: var(--muted); font-size: 11px; font-weight: 400; }
+
+  /* Two column layout */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .empty .icon { font-size: 36px; margin-bottom: 8px; }
+  .empty p { font-size: 12px; }
+
+  /* Reconcile flags */
+  .flag { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; border: 1px solid; }
+  .flag-warn { border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.06); }
+  .flag-danger { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.06); }
+  .flag-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .flag-body { flex: 1; }
+  .flag-title { font-size: 12px; font-weight: 600; }
+  .flag-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Chart containers */
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .chart-card h4 { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
+
+  /* Pulse for pending */
+  @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:.5 } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Toast */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 12px; max-width: 300px; animation: slideIn .2s ease; }
+  .toast.success { border-color: var(--success); }
+  .toast.warn { border-color: var(--warn); }
+  .toast.error { border-color: var(--danger); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+
+  .row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
+  tr:hover .row-actions { opacity: 1; }
+
+  /* Import log */
+  #import-log { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 11px; color: var(--text2); max-height: 150px; overflow-y: auto; font-family: monospace; margin-top: 12px; display: none; }
+  #import-log.show { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo">
+      <h2>📦 BG Tracker</h2>
+      <p>Buying Group Canada</p>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="switchTab('dashboard')"><span class="icon">🏠</span> Dashboard</div>
+      <div class="nav-section">Orders</div>
+      <div class="nav-item" onclick="switchTab('orders')"><span class="icon">🛒</span> All Orders</div>
+      <div class="nav-item" onclick="switchTab('instore')"><span class="icon">🏪</span> In-Store</div>
+      <div class="nav-section">Buying Group</div>
+      <div class="nav-item" onclick="switchTab('submissions')"><span class="icon">📋</span> Submissions</div>
+      <div class="nav-item" onclick="switchTab('payouts')"><span class="icon">💸</span> Payouts</div>
+      <div class="nav-section">Cashback</div>
+      <div class="nav-item" onclick="switchTab('cashback')"><span class="icon">🎁</span> Cashback</div>
+      <div class="nav-section">Tools</div>
+      <div class="nav-item" onclick="switchTab('reconcile')"><span class="icon">⚠️</span> Reconcile</div>
+      <div class="nav-item" onclick="switchTab('import')"><span class="icon">📥</span> Import CSVs</div>
+    </nav>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-subtitle" id="dash-updated">No data imported yet</div>
+        </div>
+        <button class="btn btn-ghost" onclick="switchTab('import')">📥 Import CSVs</button>
+      </div>
+      <div class="cards" id="dash-cards">
+        <div class="card accent"><div class="card-label">Total Orders</div><div class="card-value purple" id="dc-orders">0</div><div class="card-sub">across all accounts</div></div>
+        <div class="card success"><div class="card-label">BG Submitted</div><div class="card-value green" id="dc-submitted">$0</div><div class="card-sub" id="dc-submitted-sub">0 receipts</div></div>
+        <div class="card success"><div class="card-label">Total Paid Out</div><div class="card-value green" id="dc-paid">$0</div><div class="card-sub">ACH received</div></div>
+        <div class="card warn"><div class="card-label">Pending Payout</div><div class="card-value yellow pulse" id="dc-pending">$0</div><div class="card-sub" id="dc-pending-sub">0 payments</div></div>
+        <div class="card"><div class="card-label">Cashback Earned</div><div class="card-value teal" id="dc-cb-earned">$0</div><div class="card-sub">received</div></div>
+        <div class="card warn"><div class="card-label">Cashback Pending</div><div class="card-value yellow" id="dc-cb-pending">$0</div><div class="card-sub">expected</div></div>
+      </div>
+      <div class="two-col">
+        <div class="chart-card"><h4>Payouts Over Time</h4><canvas id="chart-payouts" height="160"></canvas></div>
+        <div class="chart-card"><h4>Orders by Account / Profile</h4><canvas id="chart-accounts" height="160"></canvas></div>
+      </div>
+      <div class="section-title">Recent Flags <span id="flag-count"></span></div>
+      <div id="dash-flags"><div class="empty"><div class="icon">✅</div><p>No issues detected — import data to see reconciliation flags</p></div></div>
+    </div>
+
+    <!-- ALL ORDERS -->
+    <div id="tab-orders" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">All Orders</div><div class="page-subtitle">Amazon, in-store, and other retailers</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="switchTab('import')">📥 Import CSV</button>
+          <button class="btn btn-primary" onclick="openOrderModal()">+ Add Manual</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input type="text" id="order-search" placeholder="Search orders, items, accounts..." oninput="renderOrders()">
+        <select id="order-filter-account" onchange="renderOrders()"><option value="">All Accounts</option></select>
+        <select id="order-filter-retailer" onchange="renderOrders()"><option value="">All Retailers</option></select>
+        <select id="order-filter-type" onchange="renderOrders()">
+          <option value="">All Types</option>
+          <option value="online">Online</option>
+          <option value="instore">In-Store</option>
+        </select>
+        <select id="order-filter-cb" onchange="renderOrders()">
+          <option value="">Cashback: All</option>
+          <option value="pending">CB Pending</option>
+          <option value="received">CB Received</option>
+          <option value="none">No CB</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Retailer</th><th>Account / Profile</th><th>Items</th>
+            <th class="text-right">Total (CAD)</th><th>CC</th><th>Cashback</th>
+            <th>BG Receipt</th><th>Delivery</th><th></th>
+          </tr></thead>
+          <tbody id="orders-tbody"></tbody>
+        </table>
+      </div>
+      <div id="orders-empty" class="empty" style="display:none"><div class="icon">🛒</div><p>No orders yet. Import Amazon CSV or add manually.</p></div>
+    </div>
+
+    <!-- IN-STORE -->
+    <div id="tab-instore" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">In-Store Orders</div><div class="page-subtitle">Apple, Best Buy, Staples, etc.</div></div>
+        <button class="btn btn-primary" onclick="openOrderModal('instore')">+ Add In-Store Purchase</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Store</th><th>Items / Description</th><th class="text-right">Total (CAD)</th>
+            <th>CC / Payment</th><th>Cashback Portal</th><th>BG Receipt</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody id="instore-tbody"></tbody>
+        </table>
+      </div>
+      <div id="instore-empty" class="empty"><div class="icon">🏪</div><p>No in-store purchases added yet.</p></div>
+    </div>
+
+    <!-- SUBMISSIONS -->
+    <div id="tab-submissions" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">BG Submissions</div><div class="page-subtitle">CBG receipt-items — what was submitted to the buying group</div></div>
+        <button class="btn btn-ghost" onclick="switchTab('import')">📥 Import receipt-items CSV</button>
+      </div>
+      <div class="toolbar">
+        <input type="text" id="sub-search" placeholder="Search items, receipt IDs..." oninput="renderSubmissions()">
+        <select id="sub-filter-status" onchange="renderSubmissions()">
+          <option value="">All Statuses</option>
+          <option value="RECEIVING">Receiving</option>
+          <option value="VERIFIED">Verified</option>
+          <option value="VOID">Void</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Receipt ID</th><th>Item</th><th class="text-right">Qty</th>
+            <th class="text-right">Price</th><th class="text-right">Ext Total</th>
+            <th>Tracking</th><th>Status</th><th>Verified</th>
+          </tr></thead>
+          <tbody id="submissions-tbody"></tbody>
+        </table>
+      </div>
+      <div id="submissions-empty" class="empty"><div class="icon">📋</div><p>Import your CBG receipt-items CSV to see submissions.</p></div>
+    </div>
+
+    <!-- PAYOUTS -->
+    <div id="tab-payouts" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">Payouts</div><div class="page-subtitle">CBG ACH payments — verified vs pending</div></div>
+        <button class="btn btn-ghost" onclick="switchTab('import')">📥 Import payments CSV</button>
+      </div>
+      <div class="cards" style="grid-template-columns:repeat(3,1fr)">
+        <div class="card success"><div class="card-label">Total Paid</div><div class="card-value green" id="payout-total-paid">$0</div><div class="card-sub" id="payout-paid-count">0 payments</div></div>
+        <div class="card warn"><div class="card-label">Requested / Pending</div><div class="card-value yellow pulse" id="payout-total-pending">$0</div><div class="card-sub" id="payout-pending-count">0 payments</div></div>
+        <div class="card"><div class="card-label">Largest Single Payout</div><div class="card-value" id="payout-largest">$0</div><div class="card-sub" id="payout-largest-date"></div></div>
+      </div>
+      <div class="toolbar">
+        <input type="text" id="payout-search" placeholder="Search payments..." oninput="renderPayouts()">
+        <select id="payout-filter-status" onchange="renderPayouts()">
+          <option value="">All</option>
+          <option value="PAID">Paid</option>
+          <option value="REQUESTED">Pending</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Payment ID</th><th>Check #</th><th>Type</th>
+            <th class="text-right">Amount (USD)</th><th>Status</th><th>Verified</th>
+          </tr></thead>
+          <tbody id="payouts-tbody"></tbody>
+        </table>
+      </div>
+      <div id="payouts-empty" class="empty"><div class="icon">💸</div><p>Import your CBG payments CSV to see payout history.</p></div>
+    </div>
+
+    <!-- CASHBACK -->
+    <div id="tab-cashback" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">Cashback Tracking</div><div class="page-subtitle">Air Canada eStore, Rakuten, and other portals</div></div>
+        <button class="btn btn-primary" onclick="openCashbackModal()">+ Add Cashback Entry</button>
+      </div>
+      <div class="cards" style="grid-template-columns:repeat(4,1fr)">
+        <div class="card success"><div class="card-label">Total Received</div><div class="card-value green" id="cb-total-received">$0</div></div>
+        <div class="card warn"><div class="card-label">Pending</div><div class="card-value yellow pulse" id="cb-total-pending">$0</div></div>
+        <div class="card"><div class="card-label">Expected (All)</div><div class="card-value" id="cb-total-expected">$0</div></div>
+        <div class="card"><div class="card-label">Entries</div><div class="card-value" id="cb-count">0</div></div>
+      </div>
+
+      <!-- Portal summary -->
+      <div class="section-title">By Portal</div>
+      <div id="portal-summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+      <div class="toolbar">
+        <input type="text" id="cb-search" placeholder="Search cashback entries..." oninput="renderCashback()">
+        <select id="cb-filter-portal" onchange="renderCashback()"><option value="">All Portals</option></select>
+        <select id="cb-filter-status" onchange="renderCashback()">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="received">Received</option>
+          <option value="not_received">Not Received</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Portal</th><th>Linked Order / Description</th>
+            <th class="text-right">Purchase Amt</th><th class="text-right">Rate</th>
+            <th class="text-right">Expected</th><th class="text-right">Received</th>
+            <th>Status</th><th>Notes</th><th></th>
+          </tr></thead>
+          <tbody id="cashback-tbody"></tbody>
+        </table>
+      </div>
+      <div id="cashback-empty" class="empty"><div class="icon">🎁</div><p>Add cashback entries for Air Canada eStore, Rakuten, etc.</p></div>
+    </div>
+
+    <!-- RECONCILE -->
+    <div id="tab-reconcile" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">Reconciliation</div><div class="page-subtitle">Flag orders missing payouts, delivery, or cashback</div></div>
+        <button class="btn btn-ghost" onclick="runReconcile()">🔄 Refresh</button>
+      </div>
+      <div id="reconcile-body"><div class="empty"><div class="icon">⚠️</div><p>Import data to see reconciliation flags</p></div></div>
+    </div>
+
+    <!-- IMPORT -->
+    <div id="tab-import" class="tab-content">
+      <div class="page-header">
+        <div><div class="page-title">Import CSVs</div><div class="page-subtitle">Drag & drop or click to import — file type is auto-detected</div></div>
+        <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑 Clear All Data</button>
+      </div>
+
+      <div class="import-zone" id="main-drop-zone" onclick="document.getElementById('csv-file-input').click()"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="icon">📥</div>
+        <p><strong>Drag & drop CSV files here</strong> or click to browse</p>
+        <div class="import-types">
+          <span class="badge badge-purple">CBG receipts</span>
+          <span class="badge badge-purple">CBG receipt-items</span>
+          <span class="badge badge-purple">CBG payments</span>
+          <span class="badge badge-teal">Amazon order history</span>
+          <span class="badge badge-teal">Amazon Business orders</span>
+          <span class="badge badge-yellow">CBG items summary</span>
+        </div>
+        <input type="file" id="csv-file-input" accept=".csv" multiple onchange="handleFileSelect(event)">
+      </div>
+      <div id="import-log"></div>
+
+      <div class="section-title" style="margin-top:20px">Data Summary</div>
+      <div class="cards" style="grid-template-columns:repeat(5,1fr)">
+        <div class="card"><div class="card-label">Orders</div><div class="card-value" id="stat-orders">0</div></div>
+        <div class="card"><div class="card-label">BG Receipt Items</div><div class="card-value" id="stat-items">0</div></div>
+        <div class="card"><div class="card-label">BG Receipts</div><div class="card-value" id="stat-receipts">0</div></div>
+        <div class="card"><div class="card-label">Payments</div><div class="card-value" id="stat-payments">0</div></div>
+        <div class="card"><div class="card-label">Cashback Entries</div><div class="card-value" id="stat-cashback">0</div></div>
+      </div>
+
+      <div class="section-title" style="margin-top:16px">Export Data</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="exportCSV('orders')">Export Orders CSV</button>
+        <button class="btn btn-ghost" onclick="exportCSV('cashback')">Export Cashback CSV</button>
+        <button class="btn btn-ghost" onclick="exportCSV('reconcile')">Export Reconcile Report</button>
+        <button class="btn btn-ghost" onclick="saveJSON()">💾 Save All Data (JSON)</button>
+        <button class="btn btn-ghost" onclick="loadJSONFile()">📂 Load Saved Data (JSON)</button>
+        <input type="file" id="json-load-input" accept=".json" style="display:none" onchange="loadJSON(event)">
+      </div>
+    </div>
+
+  </div><!-- end main -->
+</div><!-- end app -->
+
+<!-- ORDER MODAL -->
+<div class="modal-bg" id="order-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="order-modal-title">Add Order</h3>
+      <button class="close-btn" onclick="closeModal('order-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="o-date">
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="o-type" onchange="toggleOrderType()">
+            <option value="online">Online</option>
+            <option value="instore">In-Store</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Retailer / Store</label>
+          <select id="o-retailer">
+            <option>Amazon.ca</option>
+            <option>Apple Store</option>
+            <option>Apple.ca</option>
+            <option>Best Buy</option>
+            <option>Staples</option>
+            <option>Walmart</option>
+            <option>Costco</option>
+            <option>The Source</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group" id="o-account-group">
+          <label>Account / Profile</label>
+          <input type="text" id="o-account" placeholder="e.g. ModrnTO, TMU email...">
+        </div>
+        <div class="form-group">
+          <label>Order ID / Reference</label>
+          <input type="text" id="o-orderid" placeholder="701-xxx or receipt #">
+        </div>
+        <div class="form-group">
+          <label>Total (CAD)</label>
+          <input type="number" step="0.01" id="o-total" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Credit Card</label>
+          <input type="text" id="o-cc" placeholder="e.g. AMX 1004, Visa 2000">
+        </div>
+        <div class="form-group">
+          <label>Cashback Portal</label>
+          <select id="o-cb-portal">
+            <option value="">— None —</option>
+            <option>Air Canada eStore</option>
+            <option>Rakuten</option>
+            <option>Great Canadian Rebates</option>
+            <option>TopCashback</option>
+            <option>PC Optimum</option>
+            <option>MBNA Portal</option>
+            <option>Amex Offers</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Cashback Rate (%)</label>
+          <input type="number" step="0.1" id="o-cb-rate" placeholder="e.g. 3.5">
+        </div>
+        <div class="form-group">
+          <label>Cashback Status</label>
+          <select id="o-cb-status">
+            <option value="none">N/A</option>
+            <option value="pending">Pending</option>
+            <option value="received">Received</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>BG Receipt ID</label>
+          <input type="text" id="o-bg-receipt" placeholder="CBG receipt ID">
+        </div>
+        <div class="form-group">
+          <label>Delivery Tracking #</label>
+          <input type="text" id="o-tracking" placeholder="TBA... or 1Z...">
+        </div>
+        <div class="form-group full">
+          <label>Items / Description</label>
+          <textarea id="o-desc" placeholder="Item names, quantities, ASINs..."></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <textarea id="o-notes" placeholder="Any additional notes..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('order-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOrder()">Save Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- CASHBACK MODAL -->
+<div class="modal-bg" id="cashback-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add Cashback Entry</h3>
+      <button class="close-btn" onclick="closeModal('cashback-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Date of Purchase</label>
+          <input type="date" id="cb-date">
+        </div>
+        <div class="form-group">
+          <label>Portal</label>
+          <select id="cb-portal">
+            <option>Air Canada eStore</option>
+            <option>Rakuten</option>
+            <option>Great Canadian Rebates</option>
+            <option>TopCashback</option>
+            <option>PC Optimum</option>
+            <option>MBNA Portal</option>
+            <option>Amex Offers</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Linked Order ID</label>
+          <input type="text" id="cb-order-id" placeholder="Order ID or reference">
+        </div>
+        <div class="form-group">
+          <label>Retailer / Store</label>
+          <input type="text" id="cb-retailer" placeholder="Amazon, Apple...">
+        </div>
+        <div class="form-group">
+          <label>Purchase Amount (CAD)</label>
+          <input type="number" step="0.01" id="cb-purchase-amt" placeholder="0.00" oninput="calcExpected()">
+        </div>
+        <div class="form-group">
+          <label>Cashback Rate (%)</label>
+          <input type="number" step="0.1" id="cb-rate" placeholder="e.g. 3.5" oninput="calcExpected()">
+        </div>
+        <div class="form-group">
+          <label>Expected Cashback</label>
+          <input type="number" step="0.01" id="cb-expected" placeholder="Auto-calculated">
+        </div>
+        <div class="form-group">
+          <label>Received Amount</label>
+          <input type="number" step="0.01" id="cb-received" placeholder="0.00 if pending">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="cb-status-field">
+            <option value="pending">Pending</option>
+            <option value="received">Received</option>
+            <option value="not_received">Not Received / Expired</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Expected Receipt Date</label>
+          <input type="date" id="cb-expected-date">
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <textarea id="cb-notes" placeholder="Points type, conditions, etc."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('cashback-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCashback()">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// =====================
+// STATE
+// =====================
+let state = {
+  orders: [],        // all orders (online + in-store)
+  bgReceiptItems: [], // CBG receipt-item CSVs
+  bgReceipts: [],    // CBG receipts CSVs
+  bgPayments: [],    // CBG payments CSVs
+  bgItems: [],       // CBG items summary
+  cashback: [],      // manual cashback entries
+};
+
+let editingOrderId = null;
+let editingCbId = null;
+
+// Load from localStorage on start
+(function init() {
+  const saved = localStorage.getItem('bg_tracker_state');
+  if (saved) {
+    try { state = JSON.parse(saved); toast('Data loaded from browser storage', 'success'); }
+    catch(e) {}
+  }
+  refreshAll();
+})();
+
+function saveState() {
+  localStorage.setItem('bg_tracker_state', JSON.stringify(state));
+}
+
+function clearAllData() {
+  if (!confirm('Clear ALL imported data? This cannot be undone.')) return;
+  state = { orders: [], bgReceiptItems: [], bgReceipts: [], bgPayments: [], bgItems: [], cashback: [] };
+  saveState();
+  refreshAll();
+  toast('All data cleared', 'warn');
+}
+
+// =====================
+// NAV
+// =====================
+function switchTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  const items = document.querySelectorAll('.nav-item');
+  items.forEach(n => { if (n.getAttribute('onclick')?.includes("'" + id + "'")) n.classList.add('active'); });
+  if (id === 'dashboard') updateDashboard();
+  if (id === 'orders') renderOrders();
+  if (id === 'instore') renderInStore();
+  if (id === 'submissions') renderSubmissions();
+  if (id === 'payouts') renderPayouts();
+  if (id === 'cashback') renderCashback();
+  if (id === 'reconcile') runReconcile();
+  if (id === 'import') updateImportStats();
+}
+
+// =====================
+// CSV AUTO-DETECT & PARSE
+// =====================
+function detectCSVType(headers) {
+  const h = headers.map(x => x.replace(/^"/, '').replace(/"$/, '').trim().toUpperCase());
+  if (h.includes('RECEIPT ID') && h.includes('ITEM') && h.includes('TOTAL PRICE')) return 'bg-receipt-items';
+  if (h.includes('CHECK NUM') && h.includes('PAY TO') && h.includes('ACH ACCOUNT')) return 'bg-payments';
+  if (h.includes('TRACKING NUMBERS') && h.includes('WAREHOUSE') && !h.includes('RECEIPT ID') && h.includes('VERIFIED')) return 'bg-receipts';
+  if (h.includes('ITEM') && h.includes('WAREHOUSE') && h.includes('DATE') && h.includes('AVG PRICE')) return 'bg-items';
+  if (h.includes('ORDER ID') && h.includes('ASIN') && h.includes('DESCRIPTION') && h.includes('ORDER URL')) return 'amazon-personal';
+  if (h.includes('ORDER ID') && h.includes('ACCOUNT GROUP') && h.includes('ASIN') && h.includes('TITLE')) return 'amazon-business';
+  if (h.includes('MARKETPLACE_ORDER_ID') && h.includes('MARKETPLACE')) return 'ticket-orders';
+  return 'unknown';
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = parseCSVRow(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVRow(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h.replace(/^"/, '').replace(/"$/, '').trim()] = (vals[idx] || '').replace(/^"/, '').replace(/"$/, '').trim().replace(/^=""(.*)""$/, '$1');
+    });
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function parseCSVRow(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; cur += c; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// =====================
+// FILE HANDLING
+// =====================
+function onDragOver(e) { e.preventDefault(); document.getElementById('main-drop-zone').classList.add('dragover'); }
+function onDragLeave(e) { document.getElementById('main-drop-zone').classList.remove('dragover'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('main-drop-zone').classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+  processFiles(files);
+}
+function handleFileSelect(e) { processFiles(Array.from(e.target.files)); e.target.value = ''; }
+
+function processFiles(files) {
+  const log = document.getElementById('import-log');
+  log.classList.add('show');
+  log.innerHTML = '';
+  let pending = files.length;
+  if (!pending) { logMsg(log, '⚠️ No CSV files found', 'warn'); return; }
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = importCSV(e.target.result, file.name, log);
+      pending--;
+      if (pending === 0) { saveState(); refreshAll(); updateImportStats(); }
+    };
+    reader.readAsText(file);
+  });
+}
+
+function logMsg(log, msg, type = '') {
+  const el = document.createElement('div');
+  el.style.color = type === 'warn' ? 'var(--warn)' : type === 'success' ? 'var(--success)' : type === 'error' ? 'var(--danger)' : 'var(--text2)';
+  el.textContent = msg;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+function importCSV(text, filename, log) {
+  const parsed = parseCSV(text);
+  if (!parsed || !parsed.rows.length) { logMsg(log, `⚠️ ${filename}: Empty or unreadable`, 'warn'); return; }
+  const type = detectCSVType(parsed.headers.map(h => h.replace(/^"/, '').replace(/"$/, '')));
+  logMsg(log, `📄 ${filename} → detected: ${type}`);
+
+  if (type === 'bg-receipt-items') {
+    let added = 0;
+    parsed.rows.forEach(r => {
+      const id = r['ID'];
+      if (!state.bgReceiptItems.find(x => x.id === id)) {
+        state.bgReceiptItems.push({
+          id, receiptId: r['RECEIPT ID'], item: r['ITEM'], qty: r['QTY'], price: r['PRICE'],
+          tax: r['TAX'], commission: r['COMMISSION'], totalPrice: r['TOTAL PRICE'], extTotal: r['EXT TOTAL'],
+          createdDate: r['CREATED DATE'], warehouse: r['WAREHOUSE'], status: r['STATUS'],
+          delivery: r['DELIVERY'], tracking: r['TRACKING NUMBERS'], verified: r['VERIFIED'] === '1',
+          voided: r['VOID'] === '1'
+        });
+        added++;
+      }
+    });
+    logMsg(log, `  ✅ ${added} receipt items imported (${parsed.rows.length - added} dupes skipped)`, 'success');
+  }
+  else if (type === 'bg-receipts') {
+    let added = 0;
+    parsed.rows.forEach(r => {
+      const id = r['ID'];
+      if (!state.bgReceipts.find(x => x.id === id)) {
+        state.bgReceipts.push({
+          id, delivery: r['DELIVERY'], status: r['STATUS'], warehouse: r['WAREHOUSE'],
+          count: r['COUNT'], qty: r['QTY'], commission: r['COMMISSION'], tax: r['TAX'],
+          total: r['TOTAL'], tracking: r['TRACKING NUMBERS'], createdDate: r['CREATED DATE'],
+          modifiedDate: r['MODIFIED DATE'], verified: r['VERIFIED'] === '1', voided: r['VOID'] === '1'
+        });
+        added++;
+      }
+    });
+    logMsg(log, `  ✅ ${added} receipts imported`, 'success');
+  }
+  else if (type === 'bg-payments') {
+    let added = 0;
+    parsed.rows.forEach(r => {
+      const id = r['ID'];
+      if (!state.bgPayments.find(x => x.id === id)) {
+        state.bgPayments.push({
+          id, status: r['STATUS'], type: r['TYPE'], checkNum: r['CHECK NUM'],
+          date: r['DATE'], amount: parseFloat(r['AMOUNT']) || 0, payTo: r['PAY TO'],
+          receiptId: r['RECEIPT ID'], memo: r['MEMO'], achAccount: r['ACH ACCOUNT'],
+          voided: r['VOID'] === '1'
+        });
+        added++;
+      }
+    });
+    logMsg(log, `  ✅ ${added} payments imported`, 'success');
+  }
+  else if (type === 'bg-items') {
+    let added = 0;
+    parsed.rows.forEach(r => {
+      state.bgItems.push({ item: r['ITEM'], warehouse: r['WAREHOUSE'], date: r['DATE'],
+        count: r['COUNT'], qty: r['QTY'], totalPrice: r['TOTAL PRICE'], extTotal: r['EXT TOTAL'],
+        avgPrice: r['AVG PRICE'] });
+      added++;
+    });
+    logMsg(log, `  ✅ ${added} item summary rows imported`, 'success');
+  }
+  else if (type === 'amazon-personal') {
+    let added = 0;
+    // Group by order ID
+    const grouped = {};
+    parsed.rows.forEach(r => {
+      const oid = r['order id'];
+      if (!grouped[oid]) grouped[oid] = { orderId: oid, date: r['order date'], items: [], total: 0, account: 'Amazon Personal' };
+      const price = parseFloat(r['price']?.replace('$','')) || 0;
+      const qty = parseInt(r['quantity']) || 1;
+      grouped[oid].items.push({ desc: r['description'], qty, price, asin: r['ASIN'] });
+      grouped[oid].total += price * qty;
+    });
+    Object.values(grouped).forEach(order => {
+      if (!state.orders.find(x => x.orderId === order.orderId)) {
+        state.orders.push({ id: uid(), orderId: order.orderId, date: order.date, retailer: 'Amazon.ca',
+          account: order.account, type: 'online', desc: order.items.map(i => `${i.qty}x ${i.desc}`).join('\n'),
+          total: order.total, cc: '', cbPortal: '', cbRate: '', cbStatus: 'none', cbExpected: 0, cbReceived: 0,
+          bgReceiptId: '', tracking: '', notes: '', source: 'amazon-personal' });
+        added++;
+      }
+    });
+    logMsg(log, `  ✅ ${added} Amazon personal orders imported`, 'success');
+  }
+  else if (type === 'amazon-business') {
+    let added = 0;
+    const grouped = {};
+    parsed.rows.forEach(r => {
+      const oid = r['Order ID'];
+      if (!grouped[oid]) {
+        const ccNum = r['Payment Identifier']?.replace(/^="(.*)"$/, '$1') || '';
+        const ccType = r['Payment Instrument Type'] || '';
+        grouped[oid] = { orderId: oid, date: r['Order Date'], items: [], total: parseFloat(r['Order net total']) || 0,
+          account: r['Account user email'] || r['Account Group'] || 'Amazon Business',
+          cc: ccType ? `${ccType} ${ccNum}` : ccNum };
+      }
+      grouped[oid].items.push({ desc: r['Title'], qty: parseInt(r['Item Quantity']) || 1,
+        price: parseFloat(r['Purchase PPU']) || 0, asin: r['ASIN'] });
+    });
+    Object.values(grouped).forEach(order => {
+      if (!state.orders.find(x => x.orderId === order.orderId)) {
+        state.orders.push({ id: uid(), orderId: order.orderId, date: order.date, retailer: 'Amazon.ca',
+          account: order.account, type: 'online', desc: order.items.map(i => `${i.qty}x ${i.desc}`).join('\n'),
+          total: order.total, cc: order.cc, cbPortal: '', cbRate: '', cbStatus: 'none', cbExpected: 0,
+          cbReceived: 0, bgReceiptId: '', tracking: '', notes: '', source: 'amazon-business' });
+        added++;
+      }
+    });
+    logMsg(log, `  ✅ ${added} Amazon Business orders imported`, 'success');
+  }
+  else {
+    logMsg(log, `  ⚠️ ${filename}: Unknown CSV type — headers: ${parsed.headers.slice(0,4).join(', ')}`, 'warn');
+  }
+}
+
+// =====================
+// RENDER: ORDERS
+// =====================
+function renderOrders() {
+  const search = document.getElementById('order-search').value.toLowerCase();
+  const fAccount = document.getElementById('order-filter-account').value;
+  const fRetailer = document.getElementById('order-filter-retailer').value;
+  const fType = document.getElementById('order-filter-type').value;
+  const fCb = document.getElementById('order-filter-cb').value;
+
+  // Populate filter dropdowns
+  const accounts = [...new Set(state.orders.map(o => o.account).filter(Boolean))];
+  const retailers = [...new Set(state.orders.map(o => o.retailer).filter(Boolean))];
+  populateSelect('order-filter-account', accounts, fAccount, 'All Accounts');
+  populateSelect('order-filter-retailer', retailers, fRetailer, 'All Retailers');
+
+  let orders = state.orders.filter(o => {
+    if (fAccount && o.account !== fAccount) return false;
+    if (fRetailer && o.retailer !== fRetailer) return false;
+    if (fType && o.type !== fType) return false;
+    if (fCb === 'pending' && o.cbStatus !== 'pending') return false;
+    if (fCb === 'received' && o.cbStatus !== 'received') return false;
+    if (fCb === 'none' && o.cbStatus !== 'none' && o.cbStatus !== '') return false;
+    if (search && !JSON.stringify(o).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+
+  const tbody = document.getElementById('orders-tbody');
+  const empty = document.getElementById('orders-empty');
+  if (!orders.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = orders.map(o => `
+    <tr>
+      <td class="nowrap">${fmtDate(o.date)}</td>
+      <td>${o.retailer || '—'}</td>
+      <td><span class="muted">${o.account || '—'}</span></td>
+      <td style="max-width:220px;white-space:pre-wrap;font-size:11px">${truncate(o.desc || '—', 80)}</td>
+      <td class="text-right nowrap"><strong>${fmtMoney(o.total)}</strong></td>
+      <td class="mono muted">${o.cc || '—'}</td>
+      <td>${cbBadge(o)}</td>
+      <td class="mono">${o.bgReceiptId ? `<span class="badge badge-purple">${o.bgReceiptId}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="mono" style="font-size:11px">${o.tracking ? `<span title="${o.tracking}">📦 ${o.tracking.slice(0,14)}…</span>` : '<span class="muted">—</span>'}</td>
+      <td><div class="row-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editOrder('${o.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">✕</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+function renderInStore() {
+  const orders = state.orders.filter(o => o.type === 'instore').sort((a,b) => b.date.localeCompare(a.date));
+  const tbody = document.getElementById('instore-tbody');
+  const empty = document.getElementById('instore-empty');
+  if (!orders.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = orders.map(o => `
+    <tr>
+      <td class="nowrap">${fmtDate(o.date)}</td>
+      <td>${o.retailer || '—'}</td>
+      <td style="max-width:220px;font-size:11px">${truncate(o.desc || '—', 80)}</td>
+      <td class="text-right"><strong>${fmtMoney(o.total)}</strong></td>
+      <td class="mono muted">${o.cc || '—'}</td>
+      <td>${o.cbPortal ? `<span class="badge badge-teal">${o.cbPortal}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="mono">${o.bgReceiptId || '<span class="muted">—</span>'}</td>
+      <td>${o.cbStatus === 'pending' ? '<span class="dot dot-yellow"></span>Pending' : o.cbStatus === 'received' ? '<span class="dot dot-green"></span>Done' : '—'}</td>
+      <td><div class="row-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editOrder('${o.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">✕</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+// =====================
+// RENDER: SUBMISSIONS
+// =====================
+function renderSubmissions() {
+  const search = document.getElementById('sub-search').value.toLowerCase();
+  const fStatus = document.getElementById('sub-filter-status').value;
+  let items = state.bgReceiptItems.filter(i => {
+    if (fStatus && i.status !== fStatus) return false;
+    if (search && !JSON.stringify(i).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => b.createdDate.localeCompare(a.createdDate));
+
+  const tbody = document.getElementById('submissions-tbody');
+  const empty = document.getElementById('submissions-empty');
+  if (!items.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = items.map(i => `
+    <tr>
+      <td class="nowrap muted">${fmtDate(i.createdDate)}</td>
+      <td class="mono"><span class="badge badge-purple">${i.receiptId}</span></td>
+      <td>${i.item}</td>
+      <td class="text-right">${i.qty}</td>
+      <td class="text-right">${fmtMoney(i.price)}</td>
+      <td class="text-right"><strong>${fmtMoney(i.extTotal)}</strong></td>
+      <td class="mono" style="font-size:10px">${i.tracking ? truncate(i.tracking, 18) : '<span class="muted">—</span>'}</td>
+      <td>${statusBadge(i.status)}</td>
+      <td>${i.verified ? '<span class="badge badge-green">✓ Verified</span>' : i.voided ? '<span class="badge badge-red">Void</span>' : '<span class="badge badge-gray">Pending</span>'}</td>
+    </tr>`).join('');
+}
+
+// =====================
+// RENDER: PAYOUTS
+// =====================
+function renderPayouts() {
+  const search = document.getElementById('payout-search').value.toLowerCase();
+  const fStatus = document.getElementById('payout-filter-status').value;
+  let payments = state.bgPayments.filter(p => {
+    if (fStatus && p.status !== fStatus) return false;
+    if (search && !JSON.stringify(p).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+
+  const paid = state.bgPayments.filter(p => p.status === 'PAID' && !p.voided);
+  const pending = state.bgPayments.filter(p => p.status === 'REQUESTED' && !p.voided);
+  const totalPaid = paid.reduce((s, p) => s + p.amount, 0);
+  const totalPending = pending.reduce((s, p) => s + p.amount, 0);
+  const largest = [...state.bgPayments].sort((a,b) => b.amount - a.amount)[0];
+
+  document.getElementById('payout-total-paid').textContent = fmtMoney(totalPaid);
+  document.getElementById('payout-paid-count').textContent = `${paid.length} payments`;
+  document.getElementById('payout-total-pending').textContent = fmtMoney(totalPending);
+  document.getElementById('payout-pending-count').textContent = `${pending.length} awaiting`;
+  document.getElementById('payout-largest').textContent = largest ? fmtMoney(largest.amount) : '$0';
+  document.getElementById('payout-largest-date').textContent = largest ? fmtDate(largest.date) : '';
+
+  const tbody = document.getElementById('payouts-tbody');
+  const empty = document.getElementById('payouts-empty');
+  if (!payments.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = payments.map(p => `
+    <tr>
+      <td class="nowrap">${fmtDate(p.date)}</td>
+      <td class="mono muted">${p.id}</td>
+      <td class="mono">${p.checkNum || '<span class="muted">—</span>'}</td>
+      <td>${p.type || '—'}</td>
+      <td class="text-right"><strong>${fmtMoney(p.amount)}</strong></td>
+      <td>${p.status === 'PAID' ? '<span class="badge badge-green">✓ PAID</span>' : '<span class="badge badge-yellow pulse">REQUESTED</span>'}</td>
+      <td>${p.status === 'PAID' ? '<span class="dot dot-green"></span>Confirmed' : '<span class="dot dot-yellow"></span>Pending'}</td>
+    </tr>`).join('');
+}
+
+// =====================
+// RENDER: CASHBACK
+// =====================
+function renderCashback() {
+  const search = document.getElementById('cb-search').value.toLowerCase();
+  const fPortal = document.getElementById('cb-filter-portal').value;
+  const fStatus = document.getElementById('cb-filter-status').value;
+  const portals = [...new Set(state.cashback.map(c => c.portal).filter(Boolean))];
+  populateSelect('cb-filter-portal', portals, fPortal, 'All Portals');
+
+  let entries = state.cashback.filter(c => {
+    if (fPortal && c.portal !== fPortal) return false;
+    if (fStatus && c.status !== fStatus) return false;
+    if (search && !JSON.stringify(c).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+
+  const totalReceived = state.cashback.filter(c => c.status === 'received').reduce((s,c) => s + (parseFloat(c.received)||0), 0);
+  const totalPending = state.cashback.filter(c => c.status === 'pending').reduce((s,c) => s + (parseFloat(c.expected)||0), 0);
+  const totalExpected = state.cashback.reduce((s,c) => s + (parseFloat(c.expected)||0), 0);
+  document.getElementById('cb-total-received').textContent = fmtMoney(totalReceived);
+  document.getElementById('cb-total-pending').textContent = fmtMoney(totalPending);
+  document.getElementById('cb-total-expected').textContent = fmtMoney(totalExpected);
+  document.getElementById('cb-count').textContent = state.cashback.length;
+
+  // Portal summary
+  const ps = document.getElementById('portal-summary');
+  const byPortal = {};
+  state.cashback.forEach(c => {
+    if (!byPortal[c.portal]) byPortal[c.portal] = { received: 0, pending: 0 };
+    if (c.status === 'received') byPortal[c.portal].received += parseFloat(c.received)||0;
+    else byPortal[c.portal].pending += parseFloat(c.expected)||0;
+  });
+  ps.innerHTML = Object.entries(byPortal).map(([p, d]) => `
+    <div class="card" style="min-width:140px;flex:1">
+      <div class="card-label">${p}</div>
+      <div class="card-value green" style="font-size:16px">${fmtMoney(d.received)}</div>
+      <div class="card-sub">${fmtMoney(d.pending)} pending</div>
+    </div>`).join('') || '<p class="muted" style="font-size:12px">No cashback entries yet</p>';
+
+  const tbody = document.getElementById('cashback-tbody');
+  const empty = document.getElementById('cashback-empty');
+  if (!entries.length) { tbody.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = entries.map(c => `
+    <tr>
+      <td class="nowrap">${fmtDate(c.date)}</td>
+      <td><span class="badge badge-teal">${c.portal}</span></td>
+      <td><div style="font-size:11px">${c.retailer || ''}${c.orderId ? ` <span class="mono muted">${c.orderId}</span>` : ''}</div></td>
+      <td class="text-right">${fmtMoney(c.purchaseAmt)}</td>
+      <td class="text-right muted">${c.rate ? c.rate + '%' : '—'}</td>
+      <td class="text-right">${fmtMoney(c.expected)}</td>
+      <td class="text-right"><strong>${c.status === 'received' ? fmtMoney(c.received) : '—'}</strong></td>
+      <td>${c.status === 'received' ? '<span class="badge badge-green">✓ Received</span>' : c.status === 'not_received' ? '<span class="badge badge-red">Not Received</span>' : '<span class="badge badge-yellow pulse">Pending</span>'}</td>
+      <td class="muted" style="font-size:11px">${c.notes || '—'}</td>
+      <td><div class="row-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editCashback('${c.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCashback('${c.id}')">✕</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+// =====================
+// RECONCILE
+// =====================
+function runReconcile() {
+  const flags = [];
+  // Pending payouts
+  const pendingPayouts = state.bgPayments.filter(p => p.status === 'REQUESTED' && !p.voided);
+  if (pendingPayouts.length) {
+    const total = pendingPayouts.reduce((s,p) => s + p.amount, 0);
+    flags.push({ type: 'warn', icon: '💰', title: `${pendingPayouts.length} payout(s) still REQUESTED`, desc: `Total ${fmtMoney(total)} USD not yet confirmed as PAID — verify in CBG portal` });
+  }
+  // Pending cashback
+  const pendingCb = state.cashback.filter(c => c.status === 'pending');
+  if (pendingCb.length) {
+    const total = pendingCb.reduce((s,c) => s + (parseFloat(c.expected)||0), 0);
+    const overdue = pendingCb.filter(c => c.expectedDate && c.expectedDate < new Date().toISOString().slice(0,10));
+    flags.push({ type: overdue.length ? 'danger' : 'warn', icon: '🎁', title: `${pendingCb.length} cashback entries pending${overdue.length ? ` (${overdue.length} overdue!)` : ''}`, desc: `${fmtMoney(total)} expected across portals — check Air Canada eStore, Rakuten dashboards` });
+  }
+  // Orders with no BG receipt
+  const onlineNoBG = state.orders.filter(o => o.type === 'online' && !o.bgReceiptId && o.retailer === 'Amazon.ca');
+  if (onlineNoBG.length) {
+    flags.push({ type: 'warn', icon: '📋', title: `${onlineNoBG.length} online Amazon order(s) not linked to a BG receipt`, desc: 'Assign a CBG Receipt ID to these orders or verify they were submitted' });
+  }
+  // Orders with no tracking
+  const noTracking = state.orders.filter(o => o.type === 'online' && !o.tracking);
+  if (noTracking.length) {
+    flags.push({ type: 'warn', icon: '📦', title: `${noTracking.length} online order(s) missing delivery tracking`, desc: 'Add tracking numbers to verify delivery' });
+  }
+  // Unverified receipt items
+  const unverified = state.bgReceiptItems.filter(i => !i.verified && !i.voided);
+  if (unverified.length) {
+    const total = unverified.reduce((s,i) => s + (parseFloat(i.extTotal)||0), 0);
+    flags.push({ type: 'warn', icon: '⏳', title: `${unverified.length} CBG receipt item(s) not yet verified`, desc: `${fmtMoney(total)} USD in unverified submissions — waiting for BG confirmation` });
+  }
+  // Cashback not received and overdue
+  const overdueNotReceived = state.cashback.filter(c => c.status === 'not_received');
+  if (overdueNotReceived.length) {
+    flags.push({ type: 'danger', icon: '❌', title: `${overdueNotReceived.length} cashback entry/entries marked NOT RECEIVED`, desc: 'Consider contacting the portal or re-submitting' });
+  }
+
+  const body = document.getElementById('reconcile-body');
+  if (!flags.length) {
+    body.innerHTML = '<div class="empty"><div class="icon">✅</div><p>No issues detected! All payouts confirmed, cashback tracked, deliveries linked.</p></div>';
+    return;
+  }
+  body.innerHTML = flags.map(f => `
+    <div class="flag flag-${f.type}">
+      <div class="flag-icon">${f.icon}</div>
+      <div class="flag-body"><div class="flag-title">${f.title}</div><div class="flag-desc">${f.desc}</div></div>
+    </div>`).join('');
+}
+
+// =====================
+// DASHBOARD
+// =====================
+let payoutChart = null, accountChart = null;
+function updateDashboard() {
+  const totalOrders = state.orders.length;
+  const bgTotal = state.bgReceiptItems.reduce((s,i) => s + (parseFloat(i.extTotal)||0), 0);
+  const bgCount = [...new Set(state.bgReceiptItems.map(i => i.receiptId))].length;
+  const paid = state.bgPayments.filter(p => p.status === 'PAID' && !p.voided);
+  const pending = state.bgPayments.filter(p => p.status === 'REQUESTED' && !p.voided);
+  const totalPaid = paid.reduce((s,p) => s+p.amount, 0);
+  const totalPending = pending.reduce((s,p) => s+p.amount, 0);
+  const cbReceived = state.cashback.filter(c => c.status === 'received').reduce((s,c) => s+(parseFloat(c.received)||0), 0);
+  const cbPending = state.cashback.filter(c => c.status === 'pending').reduce((s,c) => s+(parseFloat(c.expected)||0), 0);
+
+  document.getElementById('dc-orders').textContent = totalOrders;
+  document.getElementById('dc-submitted').textContent = fmtMoney(bgTotal);
+  document.getElementById('dc-submitted-sub').textContent = `${bgCount} receipts`;
+  document.getElementById('dc-paid').textContent = fmtMoney(totalPaid);
+  document.getElementById('dc-pending').textContent = fmtMoney(totalPending);
+  document.getElementById('dc-pending-sub').textContent = `${pending.length} payments`;
+  document.getElementById('dc-cb-earned').textContent = fmtMoney(cbReceived);
+  document.getElementById('dc-cb-pending').textContent = fmtMoney(cbPending);
+
+  if (totalOrders || state.bgPayments.length) {
+    document.getElementById('dash-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+  }
+
+  // Payout chart
+  const paidByMonth = {};
+  paid.forEach(p => {
+    const m = p.date.slice(0,7);
+    paidByMonth[m] = (paidByMonth[m]||0) + p.amount;
+  });
+  const months = Object.keys(paidByMonth).sort();
+  const ctx1 = document.getElementById('chart-payouts').getContext('2d');
+  if (payoutChart) payoutChart.destroy();
+  payoutChart = new Chart(ctx1, {
+    type: 'bar', data: { labels: months, datasets: [{ label: 'Paid (USD)', data: months.map(m => paidByMonth[m]), backgroundColor: '#22c55e66', borderColor: '#22c55e', borderWidth: 1 }] },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2e3347' } }, y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => '$'+v }, grid: { color: '#2e3347' } } } }
+  });
+
+  // Accounts chart
+  const byAccount = {};
+  state.orders.forEach(o => { const k = o.account || 'Unknown'; byAccount[k] = (byAccount[k]||0) + 1; });
+  const accts = Object.keys(byAccount);
+  const ctx2 = document.getElementById('chart-accounts').getContext('2d');
+  if (accountChart) accountChart.destroy();
+  accountChart = new Chart(ctx2, {
+    type: 'doughnut', data: { labels: accts, datasets: [{ data: accts.map(a => byAccount[a]), backgroundColor: ['#6c63ff','#00d4aa','#f59e0b','#ef4444','#3b82f6','#8b5cf6'] }] },
+    options: { plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10 } } } }
+  });
+
+  // Flags
+  const flags = [];
+  const pendingP = state.bgPayments.filter(p => p.status === 'REQUESTED' && !p.voided);
+  if (pendingP.length) flags.push({ type: 'warn', icon: '💰', title: `${pendingP.length} payout(s) pending confirmation`, desc: `Check CBG portal` });
+  const pendingCb = state.cashback.filter(c => c.status === 'pending');
+  if (pendingCb.length) flags.push({ type: 'warn', icon: '🎁', title: `${pendingCb.length} cashback entries still pending`, desc: `Check Air Canada eStore, Rakuten` });
+  const unverified = state.bgReceiptItems.filter(i => !i.verified && !i.voided);
+  if (unverified.length) flags.push({ type: 'warn', icon: '📋', title: `${unverified.length} submissions unverified by BG`, desc: `Waiting on CBG confirmation` });
+
+  document.getElementById('flag-count').textContent = flags.length ? `(${flags.length})` : '';
+  const df = document.getElementById('dash-flags');
+  if (!flags.length) df.innerHTML = '<div class="empty"><div class="icon">✅</div><p>No flags — everything looks good!</p></div>';
+  else df.innerHTML = flags.map(f => `<div class="flag flag-${f.type}"><div class="flag-icon">${f.icon}</div><div class="flag-body"><div class="flag-title">${f.title}</div><div class="flag-desc">${f.desc}</div></div></div>`).join('');
+}
+
+// =====================
+// IMPORT STATS
+// =====================
+function updateImportStats() {
+  document.getElementById('stat-orders').textContent = state.orders.length;
+  document.getElementById('stat-items').textContent = state.bgReceiptItems.length;
+  document.getElementById('stat-receipts').textContent = state.bgReceipts.length;
+  document.getElementById('stat-payments').textContent = state.bgPayments.length;
+  document.getElementById('stat-cashback').textContent = state.cashback.length;
+}
+
+// =====================
+// ORDER MODAL
+// =====================
+function openOrderModal(type = 'online') {
+  editingOrderId = null;
+  document.getElementById('order-modal-title').textContent = type === 'instore' ? 'Add In-Store Purchase' : 'Add Order';
+  document.getElementById('o-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('o-type').value = type;
+  document.getElementById('o-retailer').value = type === 'instore' ? 'Apple Store' : 'Amazon.ca';
+  ['o-account','o-orderid','o-total','o-cc','o-cb-rate','o-bg-receipt','o-tracking','o-desc','o-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('o-cb-portal').value = '';
+  document.getElementById('o-cb-status').value = 'none';
+  document.getElementById('order-modal').classList.add('open');
+}
+function editOrder(id) {
+  const o = state.orders.find(x => x.id === id);
+  if (!o) return;
+  editingOrderId = id;
+  document.getElementById('order-modal-title').textContent = 'Edit Order';
+  document.getElementById('o-date').value = o.date?.slice(0,10) || '';
+  document.getElementById('o-type').value = o.type || 'online';
+  document.getElementById('o-retailer').value = o.retailer || 'Amazon.ca';
+  document.getElementById('o-account').value = o.account || '';
+  document.getElementById('o-orderid').value = o.orderId || '';
+  document.getElementById('o-total').value = o.total || '';
+  document.getElementById('o-cc').value = o.cc || '';
+  document.getElementById('o-cb-portal').value = o.cbPortal || '';
+  document.getElementById('o-cb-rate').value = o.cbRate || '';
+  document.getElementById('o-cb-status').value = o.cbStatus || 'none';
+  document.getElementById('o-bg-receipt').value = o.bgReceiptId || '';
+  document.getElementById('o-tracking').value = o.tracking || '';
+  document.getElementById('o-desc').value = o.desc || '';
+  document.getElementById('o-notes').value = o.notes || '';
+  document.getElementById('order-modal').classList.add('open');
+}
+function saveOrder() {
+  const o = {
+    id: editingOrderId || uid(),
+    date: document.getElementById('o-date').value,
+    type: document.getElementById('o-type').value,
+    retailer: document.getElementById('o-retailer').value,
+    account: document.getElementById('o-account').value,
+    orderId: document.getElementById('o-orderid').value,
+    total: parseFloat(document.getElementById('o-total').value) || 0,
+    cc: document.getElementById('o-cc').value,
+    cbPortal: document.getElementById('o-cb-portal').value,
+    cbRate: document.getElementById('o-cb-rate').value,
+    cbStatus: document.getElementById('o-cb-status').value,
+    cbExpected: 0, cbReceived: 0,
+    bgReceiptId: document.getElementById('o-bg-receipt').value,
+    tracking: document.getElementById('o-tracking').value,
+    desc: document.getElementById('o-desc').value,
+    notes: document.getElementById('o-notes').value,
+    source: 'manual'
+  };
+  if (o.cbPortal && o.cbRate && o.total) o.cbExpected = o.total * parseFloat(o.cbRate) / 100;
+  if (editingOrderId) { const idx = state.orders.findIndex(x => x.id === editingOrderId); state.orders[idx] = o; }
+  else state.orders.push(o);
+  saveState(); closeModal('order-modal'); refreshAll(); toast('Order saved', 'success');
+}
+function deleteOrder(id) {
+  if (!confirm('Delete this order?')) return;
+  state.orders = state.orders.filter(x => x.id !== id);
+  saveState(); refreshAll(); toast('Order deleted');
+}
+
+// =====================
+// CASHBACK MODAL
+// =====================
+function openCashbackModal() {
+  editingCbId = null;
+  document.getElementById('cb-date').value = new Date().toISOString().slice(0,10);
+  ['cb-order-id','cb-retailer','cb-purchase-amt','cb-rate','cb-expected','cb-received','cb-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cb-portal').value = 'Air Canada eStore';
+  document.getElementById('cb-status-field').value = 'pending';
+  document.getElementById('cb-expected-date').value = '';
+  document.getElementById('cashback-modal').classList.add('open');
+}
+function editCashback(id) {
+  const c = state.cashback.find(x => x.id === id);
+  if (!c) return;
+  editingCbId = id;
+  document.getElementById('cb-date').value = c.date || '';
+  document.getElementById('cb-portal').value = c.portal || '';
+  document.getElementById('cb-order-id').value = c.orderId || '';
+  document.getElementById('cb-retailer').value = c.retailer || '';
+  document.getElementById('cb-purchase-amt').value = c.purchaseAmt || '';
+  document.getElementById('cb-rate').value = c.rate || '';
+  document.getElementById('cb-expected').value = c.expected || '';
+  document.getElementById('cb-received').value = c.received || '';
+  document.getElementById('cb-status-field').value = c.status || 'pending';
+  document.getElementById('cb-expected-date').value = c.expectedDate || '';
+  document.getElementById('cb-notes').value = c.notes || '';
+  document.getElementById('cashback-modal').classList.add('open');
+}
+function saveCashback() {
+  const c = {
+    id: editingCbId || uid(),
+    date: document.getElementById('cb-date').value,
+    portal: document.getElementById('cb-portal').value,
+    orderId: document.getElementById('cb-order-id').value,
+    retailer: document.getElementById('cb-retailer').value,
+    purchaseAmt: parseFloat(document.getElementById('cb-purchase-amt').value) || 0,
+    rate: parseFloat(document.getElementById('cb-rate').value) || 0,
+    expected: parseFloat(document.getElementById('cb-expected').value) || 0,
+    received: parseFloat(document.getElementById('cb-received').value) || 0,
+    status: document.getElementById('cb-status-field').value,
+    expectedDate: document.getElementById('cb-expected-date').value,
+    notes: document.getElementById('cb-notes').value
+  };
+  if (!c.expected && c.purchaseAmt && c.rate) c.expected = c.purchaseAmt * c.rate / 100;
+  if (editingCbId) { const idx = state.cashback.findIndex(x => x.id === editingCbId); state.cashback[idx] = c; }
+  else state.cashback.push(c);
+  saveState(); closeModal('cashback-modal'); renderCashback(); toast('Cashback entry saved', 'success');
+}
+function deleteCashback(id) {
+  if (!confirm('Delete this cashback entry?')) return;
+  state.cashback = state.cashback.filter(x => x.id !== id);
+  saveState(); renderCashback(); toast('Deleted');
+}
+function calcExpected() {
+  const amt = parseFloat(document.getElementById('cb-purchase-amt').value) || 0;
+  const rate = parseFloat(document.getElementById('cb-rate').value) || 0;
+  if (amt && rate) document.getElementById('cb-expected').value = (amt * rate / 100).toFixed(2);
+}
+
+// =====================
+// EXPORT
+// =====================
+function exportCSV(type) {
+  let csv = '', filename = '';
+  if (type === 'orders') {
+    csv = 'Date,Type,Retailer,Account,Order ID,Total CAD,CC,Cashback Portal,CB Rate,CB Status,BG Receipt ID,Tracking,Description\n';
+    csv += state.orders.map(o => [o.date,o.type,o.retailer,o.account,o.orderId,o.total,o.cc,o.cbPortal,o.cbRate,o.cbStatus,o.bgReceiptId,o.tracking,`"${(o.desc||'').replace(/"/g,'""')}"`].join(',')).join('\n');
+    filename = 'bg-orders.csv';
+  } else if (type === 'cashback') {
+    csv = 'Date,Portal,Order ID,Retailer,Purchase Amt,Rate,Expected,Received,Status,Notes\n';
+    csv += state.cashback.map(c => [c.date,c.portal,c.orderId,c.retailer,c.purchaseAmt,c.rate,c.expected,c.received,c.status,`"${(c.notes||'').replace(/"/g,'""')}"`].join(',')).join('\n');
+    filename = 'bg-cashback.csv';
+  } else if (type === 'reconcile') {
+    csv = 'Type,Issue,Amount\n';
+    const pendP = state.bgPayments.filter(p => p.status === 'REQUESTED');
+    pendP.forEach(p => csv += `PAYOUT,Pending payout ID ${p.id},${p.amount}\n`);
+    state.cashback.filter(c => c.status === 'pending').forEach(c => csv += `CASHBACK,Pending ${c.portal} for ${c.orderId},${c.expected}\n`);
+    filename = 'bg-reconcile.csv';
+  }
+  dlFile(csv, filename, 'text/csv');
+}
+function saveJSON() {
+  dlFile(JSON.stringify(state, null, 2), `bg-tracker-${new Date().toISOString().slice(0,10)}.json`, 'application/json');
+}
+function loadJSONFile() { document.getElementById('json-load-input').click(); }
+function loadJSON(e) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try { state = JSON.parse(ev.target.result); saveState(); refreshAll(); toast('Data loaded!', 'success'); }
+    catch(err) { toast('Invalid JSON file', 'error'); }
+  };
+  reader.readAsText(e.target.files[0]);
+  e.target.value = '';
+}
+function dlFile(content, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+}
+
+// =====================
+// HELPERS
+// =====================
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function fmtDate(d) { if (!d) return '—'; const dt = new Date(d.replace(' ','T')); return isNaN(dt) ? d.slice(0,10) : dt.toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}); }
+function fmtMoney(n) { const v = parseFloat(n)||0; return '$' + v.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function truncate(s, n) { return s && s.length > n ? s.slice(0,n) + '…' : s; }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function toast(msg, type = '') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+function populateSelect(id, opts, current, placeholder) {
+  const sel = document.getElementById(id);
+  const prev = current || sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` + opts.map(o => `<option value="${o}" ${o===prev?'selected':''}>${o}</option>`).join('');
+}
+function cbBadge(o) {
+  if (!o.cbPortal) return '<span class="muted">—</span>';
+  const cls = o.cbStatus === 'received' ? 'badge-green' : o.cbStatus === 'pending' ? 'badge-yellow' : 'badge-gray';
+  return `<span class="badge ${cls}">${o.cbPortal} ${o.cbRate ? o.cbRate+'%' : ''}</span>`;
+}
+function statusBadge(s) {
+  if (s === 'RECEIVING') return '<span class="badge badge-yellow">Receiving</span>';
+  if (s === 'VERIFIED') return '<span class="badge badge-green">Verified</span>';
+  if (s === 'VOID') return '<span class="badge badge-red">Void</span>';
+  return `<span class="badge badge-gray">${s||'—'}</span>`;
+}
+function toggleOrderType() {}
+function refreshAll() {
+  updateDashboard();
+  renderOrders();
+  renderInStore();
+  renderSubmissions();
+  renderPayouts();
+  renderCashback();
+  updateImportStats();
+}
+</script>
+</body>
+</html>
